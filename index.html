@@ -415,7 +415,7 @@ if(dark)document.getElementById('tlbl').textContent='Tema claro';
 let USER=null,hoje=new Date(),MA={y:hoje.getFullYear(),m:hoje.getMonth()};
 let D={fixas:[],variaveis:[],parcelas:[],receitas:[],receitasFixas:[],areceber:[]};
 let PROCS=[],DIVIDAS=[],COMPS=[];
-let CP='resumo',saving=false,editProcId=null,editDivId=null,pendingFile=null;
+let CP='resumo',saving=false,editProcId=null,editDivId=null,pendingFile=null,autoSaveTimer=null;
 
 let AM='login';
 function authTab(m){AM=m;document.querySelectorAll('.auth-tab').forEach((b,i)=>b.classList.toggle('on',(i===0&&m==='login')||(i===1&&m==='signup')));document.getElementById('ab').textContent=m==='login'?'Entrar':'Criar conta';document.getElementById('anf').style.display=m==='signup'?'block':'none';showMsg('','');}
@@ -441,6 +441,7 @@ async function authSubmit(){
 }
 async function logout(){await sb.auth.signOut();location.reload();}
 
+window.addEventListener('beforeunload',(e)=>{if(autoSaveTimer){e.preventDefault();e.returnValue='';}});
 sb.auth.onAuthStateChange(async(_,session)=>{
   try{
     if(session){
@@ -505,6 +506,7 @@ async function gerarRecorrentesDoMesAnterior(){
 }
 async function salvarMes(){
   if(saving)return;saving=true;
+  clearTimeout(autoSaveTimer);autoSaveTimer=null;
   const fab=document.getElementById('fab');fab.innerHTML='<span class="spin"></span> Salvando...';fab.disabled=true;
   try{
     const{error}=await withTimeout(sb.from('meses').upsert({user_id:USER.id,mes:mk(MA),dados:D},{onConflict:'user_id,mes'}));
@@ -519,7 +521,30 @@ async function salvarMes(){
   }
   setTimeout(()=>{setFab();fab.disabled=false;saving=false;},2500);
 }
-async function mudaMes(d){MA=d>0?nxt(MA):prv(MA);document.getElementById('mm').textContent=ml(MA);try{await loadData();}catch(e){toast('Erro ao carregar mês: '+e.message,'err');}render();}
+function agendarAutoSave(){
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer=setTimeout(salvarMesSilencioso,1500);
+}
+async function salvarMesSilencioso(){
+  autoSaveTimer=null;
+  if(!USER||saving)return;
+  const fab=document.getElementById('fab');
+  const paginasComFab=['resumo','receitas','fixas','variaveis','parcelas'];
+  try{
+    const{error}=await withTimeout(sb.from('meses').upsert({user_id:USER.id,mes:mk(MA),dados:D},{onConflict:'user_id,mes'}));
+    if(error)throw error;
+    if(fab&&paginasComFab.includes(CP)){
+      fab.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Salvo automaticamente';
+      setTimeout(()=>{if(!autoSaveTimer&&!saving)setFab();},2000);
+    }
+  }catch(e){
+    toast('Não deu pra salvar automaticamente: '+e.message,'err');
+  }
+}
+async function flushAutoSave(){
+  if(autoSaveTimer){clearTimeout(autoSaveTimer);await salvarMesSilencioso();}
+}
+async function mudaMes(d){await flushAutoSave();MA=d>0?nxt(MA):prv(MA);document.getElementById('mm').textContent=ml(MA);try{await loadData();}catch(e){toast('Erro ao carregar mês: '+e.message,'err');}render();}
 
 async function loadProcs(){if(!USER)return;const{data,error}=await withTimeout(sb.from('processos').select('*').eq('user_id',USER.id).order('created_at',{ascending:false}));if(error)throw error;PROCS=data||[];}
 async function salvarProcesso(){
@@ -659,6 +684,7 @@ function togglePago(tipo,i){
   if(tipo==='fixas'){rlF();rFixas();}
   else if(tipo==='variaveis'){rlV();rVariaveis();}
   else if(tipo==='parcelas'){rlP();rParcelas();}
+  agendarAutoSave();
   if(item.pago){
     const categoria=tipo==='parcelas'?'Cartões':(item.cat||'Outros');
     openCompModal({nome:item.desc||'',valor:item.valor||'',categoria,data:new Date().toISOString().slice(0,10)});
@@ -680,7 +706,7 @@ function fabAction(){
   else salvarMes();
 }
 
-function navTo(p){CP=p;document.querySelectorAll('.ni[data-p]').forEach(el=>el.classList.toggle('on',el.dataset.p===p));setFab();render();}
+function navTo(p){if(autoSaveTimer)flushAutoSave();CP=p;document.querySelectorAll('.ni[data-p]').forEach(el=>el.classList.toggle('on',el.dataset.p===p));setFab();render();}
 function openDrawer(){document.getElementById('drawer').classList.add('open');}
 function closeDrawer(){document.getElementById('drawer').classList.remove('open');}
 
@@ -842,18 +868,19 @@ const REC_IDS={receitasFixas:'lrf',receitas:'lr',areceber:'lar'};
 function rlR(t,id){
   const el=document.getElementById(id);if(!el)return;
   if(t==='areceber'){
-    el.innerHTML=D[t].map((x,i)=>`<div class="frow-rec" style="margin-bottom:4px;grid-template-columns:34px 1fr 110px 130px 34px"><button class="tgl" onclick="marcarRecebido(${i})" title="Marcar como recebido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D['${t}'][${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D['${t}'][${i}].valor=parseFloat(this.value)||0"><select class="htipo" onchange="D['${t}'][${i}].tipo=this.value">${tSel(x.tipo||'Salário')}</select><button class="btn-ghost" onclick="del('${t}',${i})">${trash}</button></div>`).join('');
+    el.innerHTML=D[t].map((x,i)=>`<div class="frow-rec" style="margin-bottom:4px;grid-template-columns:34px 1fr 110px 130px 34px"><button class="tgl" onclick="marcarRecebido(${i})" title="Marcar como recebido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D['${t}'][${i}].desc=this.value;agendarAutoSave()"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D['${t}'][${i}].valor=parseFloat(this.value)||0;agendarAutoSave()"><select class="htipo" onchange="D['${t}'][${i}].tipo=this.value;agendarAutoSave()">${tSel(x.tipo||'Salário')}</select><button class="btn-ghost" onclick="del('${t}',${i})">${trash}</button></div>`).join('');
   } else {
-    el.innerHTML=D[t].map((x,i)=>`<div class="frow-rec" style="margin-bottom:4px"><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D['${t}'][${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D['${t}'][${i}].valor=parseFloat(this.value)||0"><select class="htipo" onchange="D['${t}'][${i}].tipo=this.value">${tSel(x.tipo||'Salário')}</select><button class="btn-ghost" onclick="del('${t}',${i})">${trash}</button></div>`).join('');
+    el.innerHTML=D[t].map((x,i)=>`<div class="frow-rec" style="margin-bottom:4px"><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D['${t}'][${i}].desc=this.value;agendarAutoSave()"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D['${t}'][${i}].valor=parseFloat(this.value)||0;agendarAutoSave()"><select class="htipo" onchange="D['${t}'][${i}].tipo=this.value;agendarAutoSave()">${tSel(x.tipo||'Salário')}</select><button class="btn-ghost" onclick="del('${t}',${i})">${trash}</button></div>`).join('');
   }
 }
-function addR(t){D[t].push({desc:'',valor:0,tipo:'Salário'});rlR(t,REC_IDS[t]);}
+function addR(t){D[t].push({desc:'',valor:0,tipo:'Salário'});rlR(t,REC_IDS[t]);agendarAutoSave();}
 function marcarRecebido(i){
   const item=D.areceber.splice(i,1)[0];
   if(!item)return;
   D.receitas.push({desc:item.desc,valor:item.valor,tipo:item.tipo||'Salário'});
   rReceitas();
-  toast('Movido para Receitas avulsas. Clique em "Salvar mês" pra guardar.','ok');
+  agendarAutoSave();
+  toast('Movido para Receitas avulsas — salvando sozinho em instantes.','ok');
 }
 function rFixas(){
   const pago=D.fixas.filter(x=>x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
@@ -861,25 +888,25 @@ function rFixas(){
   document.getElementById('pg-fixas').innerHTML=hdr('Contas fixas','Chegam todo mês')+
   `<div class="sbar2"><div class="sitem pg"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">✓ Pago</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green)">${fmt(pago)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.fixas.filter(x=>x.pago).length} lançamentos</div></div><div class="sitem ab"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">⏳ Em aberto</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--amber)">${fmt(aberto)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.fixas.filter(x=>!x.pago).length} lançamentos</div></div></div>`+
   `<div class="card"><div class="ct">Contas fixas <span class="badge bgr">${fmt(soma(D.fixas))}</span></div><div class="fhead fh-fix"><span></span><span>Descrição</span><span>Valor (R$)</span><span class="hcat">Categoria</span><span class="hvenc">Venc.</span><span></span></div><div id="lf"></div><button class="btn" onclick="addF()" style="margin-top:10px">+ Adicionar</button></div>`;rlF();}
-function rlF(){const el=document.getElementById('lf');if(!el)return;el.innerHTML=D.fixas.map((x,i)=>`<div class="frow-fix${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="togglePago('fixas',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Aluguel" oninput="D.fixas[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.fixas[${i}].valor=parseFloat(this.value)||0"><select class="hcat" onchange="D.fixas[${i}].cat=this.value">${catSel(x.cat||'Moradia')}</select><input type="number" class="hvenc" value="${x.venc||''}" placeholder="Dia" min="1" max="31" oninput="D.fixas[${i}].venc=parseInt(this.value)||null"><button class="btn-ghost" onclick="del('fixas',${i})">${trash}</button></div>`).join('');}
-function addF(){D.fixas.push({desc:'',valor:0,cat:'Moradia',venc:null});rlF();}
+function rlF(){const el=document.getElementById('lf');if(!el)return;el.innerHTML=D.fixas.map((x,i)=>`<div class="frow-fix${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="togglePago('fixas',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Aluguel" oninput="D.fixas[${i}].desc=this.value;agendarAutoSave()"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.fixas[${i}].valor=parseFloat(this.value)||0;agendarAutoSave()"><select class="hcat" onchange="D.fixas[${i}].cat=this.value;agendarAutoSave()">${catSel(x.cat||'Moradia')}</select><input type="number" class="hvenc" value="${x.venc||''}" placeholder="Dia" min="1" max="31" oninput="D.fixas[${i}].venc=parseInt(this.value)||null;agendarAutoSave()"><button class="btn-ghost" onclick="del('fixas',${i})">${trash}</button></div>`).join('');}
+function addF(){D.fixas.push({desc:'',valor:0,cat:'Moradia',venc:null});rlF();agendarAutoSave();}
 function rVariaveis(){
   const pago=D.variaveis.filter(x=>x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
   const aberto=D.variaveis.filter(x=>!x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
   document.getElementById('pg-variaveis').innerHTML=hdr('Variáveis','Gastos que mudam todo mês')+
   `<div class="sbar2"><div class="sitem pg"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">✓ Pago</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green)">${fmt(pago)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.variaveis.filter(x=>x.pago).length} lançamentos</div></div><div class="sitem ab"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">⏳ Em aberto</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--amber)">${fmt(aberto)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.variaveis.filter(x=>!x.pago).length} lançamentos</div></div></div>`+
   `<div class="card"><div class="ct">Variáveis <span class="badge bgr">${fmt(soma(D.variaveis))}</span></div><div class="fhead fh-fix"><span></span><span>Descrição</span><span>Valor (R$)</span><span class="hcat">Categoria</span><span class="hvenc">Venc.</span><span></span></div><div id="lv"></div><button class="btn" onclick="addV()" style="margin-top:10px">+ Adicionar</button></div>`;rlV();}
-function rlV(){const el=document.getElementById('lv');if(!el)return;el.innerHTML=D.variaveis.map((x,i)=>`<div class="frow-fix${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="togglePago('variaveis',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Supermercado" oninput="D.variaveis[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.variaveis[${i}].valor=parseFloat(this.value)||0"><select class="hcat" onchange="D.variaveis[${i}].cat=this.value">${catSel(x.cat||'Alimentação')}</select><input type="number" class="hvenc" value="${x.venc||''}" placeholder="Dia" min="1" max="31" oninput="D.variaveis[${i}].venc=parseInt(this.value)||null"><button class="btn-ghost" onclick="del('variaveis',${i})">${trash}</button></div>`).join('');}
-function addV(){D.variaveis.push({desc:'',valor:0,cat:'Alimentação',venc:null});rlV();}
+function rlV(){const el=document.getElementById('lv');if(!el)return;el.innerHTML=D.variaveis.map((x,i)=>`<div class="frow-fix${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="togglePago('variaveis',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Supermercado" oninput="D.variaveis[${i}].desc=this.value;agendarAutoSave()"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.variaveis[${i}].valor=parseFloat(this.value)||0;agendarAutoSave()"><select class="hcat" onchange="D.variaveis[${i}].cat=this.value;agendarAutoSave()">${catSel(x.cat||'Alimentação')}</select><input type="number" class="hvenc" value="${x.venc||''}" placeholder="Dia" min="1" max="31" oninput="D.variaveis[${i}].venc=parseInt(this.value)||null;agendarAutoSave()"><button class="btn-ghost" onclick="del('variaveis',${i})">${trash}</button></div>`).join('');}
+function addV(){D.variaveis.push({desc:'',valor:0,cat:'Alimentação',venc:null});rlV();agendarAutoSave();}
 function rParcelas(){
   const pago=D.parcelas.filter(x=>x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
   const aberto=D.parcelas.filter(x=>!x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
   document.getElementById('pg-parcelas').innerHTML=hdr('Parcelas','Cartões e financiamentos')+
   `<div class="sbar2"><div class="sitem pg"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">✓ Pago</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green)">${fmt(pago)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.parcelas.filter(x=>x.pago).length} parcelas</div></div><div class="sitem ab"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">⏳ Em aberto</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--amber)">${fmt(aberto)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.parcelas.filter(x=>!x.pago).length} parcelas</div></div></div>`+
   `<div class="card"><div class="ct">Parcelas <span class="badge bgr">${fmt(soma(D.parcelas))}</span></div><div class="fhead fh-parc"><span></span><span>Descrição</span><span>Valor/mês</span><span class="hpn">Parcela</span><span class="hpt">Total</span><span></span></div><div id="lp"></div><button class="btn" onclick="addP()" style="margin-top:10px">+ Adicionar</button></div>`;rlP();}
-function rlP(){const el=document.getElementById('lp');if(!el)return;el.innerHTML=D.parcelas.map((x,i)=>`<div class="frow-parc${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="togglePago('parcelas',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Cartão Santander" oninput="D.parcelas[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.parcelas[${i}].valor=parseFloat(this.value)||0"><input type="text" class="hpn" value="${x.parcAtual||''}" placeholder="3/12" oninput="D.parcelas[${i}].parcAtual=this.value"><input type="number" class="hpt" value="${x.parcTotal||''}" placeholder="12" oninput="D.parcelas[${i}].parcTotal=parseInt(this.value)||0"><button class="btn-ghost" onclick="del('parcelas',${i})">${trash}</button></div>`).join('');}
-function addP(){D.parcelas.push({desc:'',valor:0,parcAtual:'',parcTotal:0});rlP();}
-function del(t,i){D[t].splice(i,1);render();}
+function rlP(){const el=document.getElementById('lp');if(!el)return;el.innerHTML=D.parcelas.map((x,i)=>`<div class="frow-parc${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="togglePago('parcelas',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Cartão Santander" oninput="D.parcelas[${i}].desc=this.value;agendarAutoSave()"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.parcelas[${i}].valor=parseFloat(this.value)||0;agendarAutoSave()"><input type="text" class="hpn" value="${x.parcAtual||''}" placeholder="3/12" oninput="D.parcelas[${i}].parcAtual=this.value;agendarAutoSave()"><input type="number" class="hpt" value="${x.parcTotal||''}" placeholder="12" oninput="D.parcelas[${i}].parcTotal=parseInt(this.value)||0;agendarAutoSave()"><button class="btn-ghost" onclick="del('parcelas',${i})">${trash}</button></div>`).join('');}
+function addP(){D.parcelas.push({desc:'',valor:0,parcAtual:'',parcTotal:0});rlP();agendarAutoSave();}
+function del(t,i){D[t].splice(i,1);render();agendarAutoSave();}
 
 async function importarNaoPagos(){
   const itens=window._naoPagos||[];
