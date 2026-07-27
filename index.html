@@ -639,16 +639,30 @@ function openDivModal(d=null){
   Object.entries(f).forEach(([id,v])=>{const el=document.getElementById(id);if(el)el.value=v;});
   document.getElementById('mdiv').style.display='flex';
 }
-function openCompModal(){
+function openCompModal(prefill=null){
   pendingFile=null;
   document.getElementById('preview-wrap').style.display='none';
   document.getElementById('dz').style.display='block';
-  document.getElementById('cnome').value='';
-  document.getElementById('cval').value='';
-  document.getElementById('cdata').value='';
+  document.getElementById('cnome').value=prefill?.nome||'';
+  document.getElementById('cval').value=prefill?.valor||'';
+  document.getElementById('cdata').value=prefill?.data||'';
+  const ccat=document.getElementById('ccat');
+  if(prefill?.categoria&&[...ccat.options].some(o=>o.value===prefill.categoria))ccat.value=prefill.categoria;
+  else ccat.value='Outros';
   document.getElementById('comp-save-btn').innerHTML='Salvar comprovante';
   document.getElementById('comp-save-btn').disabled=false;
   document.getElementById('mcomp').style.display='flex';
+}
+function togglePago(tipo,i){
+  const item=D[tipo][i];
+  item.pago=!item.pago;
+  if(tipo==='fixas'){rlF();rFixas();}
+  else if(tipo==='variaveis'){rlV();rVariaveis();}
+  else if(tipo==='parcelas'){rlP();rParcelas();}
+  if(item.pago){
+    const categoria=tipo==='parcelas'?'Cartões':(item.cat||'Outros');
+    openCompModal({nome:item.desc||'',valor:item.valor||'',categoria,data:new Date().toISOString().slice(0,10)});
+  }
 }
 function closeModal(id){document.getElementById(id).style.display='none';}
 function togglePass(){const i=document.getElementById('pse');i.type=i.type==='password'?'text':'password';}
@@ -847,7 +861,7 @@ function rFixas(){
   document.getElementById('pg-fixas').innerHTML=hdr('Contas fixas','Chegam todo mês')+
   `<div class="sbar2"><div class="sitem pg"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">✓ Pago</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green)">${fmt(pago)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.fixas.filter(x=>x.pago).length} lançamentos</div></div><div class="sitem ab"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">⏳ Em aberto</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--amber)">${fmt(aberto)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.fixas.filter(x=>!x.pago).length} lançamentos</div></div></div>`+
   `<div class="card"><div class="ct">Contas fixas <span class="badge bgr">${fmt(soma(D.fixas))}</span></div><div class="fhead fh-fix"><span></span><span>Descrição</span><span>Valor (R$)</span><span class="hcat">Categoria</span><span class="hvenc">Venc.</span><span></span></div><div id="lf"></div><button class="btn" onclick="addF()" style="margin-top:10px">+ Adicionar</button></div>`;rlF();}
-function rlF(){const el=document.getElementById('lf');if(!el)return;el.innerHTML=D.fixas.map((x,i)=>`<div class="frow-fix${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="D.fixas[${i}].pago=!D.fixas[${i}].pago;rlF();rFixas()" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Aluguel" oninput="D.fixas[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.fixas[${i}].valor=parseFloat(this.value)||0"><select class="hcat" onchange="D.fixas[${i}].cat=this.value">${catSel(x.cat||'Moradia')}</select><input type="number" class="hvenc" value="${x.venc||''}" placeholder="Dia" min="1" max="31" oninput="D.fixas[${i}].venc=parseInt(this.value)||null"><button class="btn-ghost" onclick="del('fixas',${i})">${trash}</button></div>`).join('');}
+function rlF(){const el=document.getElementById('lf');if(!el)return;el.innerHTML=D.fixas.map((x,i)=>`<div class="frow-fix${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="togglePago('fixas',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Aluguel" oninput="D.fixas[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.fixas[${i}].valor=parseFloat(this.value)||0"><select class="hcat" onchange="D.fixas[${i}].cat=this.value">${catSel(x.cat||'Moradia')}</select><input type="number" class="hvenc" value="${x.venc||''}" placeholder="Dia" min="1" max="31" oninput="D.fixas[${i}].venc=parseInt(this.value)||null"><button class="btn-ghost" onclick="del('fixas',${i})">${trash}</button></div>`).join('');}
 function addF(){D.fixas.push({desc:'',valor:0,cat:'Moradia',venc:null});rlF();}
 function rVariaveis(){
   const pago=D.variaveis.filter(x=>x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
@@ -855,7 +869,7 @@ function rVariaveis(){
   document.getElementById('pg-variaveis').innerHTML=hdr('Variáveis','Gastos que mudam todo mês')+
   `<div class="sbar2"><div class="sitem pg"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">✓ Pago</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green)">${fmt(pago)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.variaveis.filter(x=>x.pago).length} lançamentos</div></div><div class="sitem ab"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">⏳ Em aberto</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--amber)">${fmt(aberto)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.variaveis.filter(x=>!x.pago).length} lançamentos</div></div></div>`+
   `<div class="card"><div class="ct">Variáveis <span class="badge bgr">${fmt(soma(D.variaveis))}</span></div><div class="fhead fh-fix"><span></span><span>Descrição</span><span>Valor (R$)</span><span class="hcat">Categoria</span><span class="hvenc">Venc.</span><span></span></div><div id="lv"></div><button class="btn" onclick="addV()" style="margin-top:10px">+ Adicionar</button></div>`;rlV();}
-function rlV(){const el=document.getElementById('lv');if(!el)return;el.innerHTML=D.variaveis.map((x,i)=>`<div class="frow-fix${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="D.variaveis[${i}].pago=!D.variaveis[${i}].pago;rlV();rVariaveis()" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Supermercado" oninput="D.variaveis[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.variaveis[${i}].valor=parseFloat(this.value)||0"><select class="hcat" onchange="D.variaveis[${i}].cat=this.value">${catSel(x.cat||'Alimentação')}</select><input type="number" class="hvenc" value="${x.venc||''}" placeholder="Dia" min="1" max="31" oninput="D.variaveis[${i}].venc=parseInt(this.value)||null"><button class="btn-ghost" onclick="del('variaveis',${i})">${trash}</button></div>`).join('');}
+function rlV(){const el=document.getElementById('lv');if(!el)return;el.innerHTML=D.variaveis.map((x,i)=>`<div class="frow-fix${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="togglePago('variaveis',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Supermercado" oninput="D.variaveis[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.variaveis[${i}].valor=parseFloat(this.value)||0"><select class="hcat" onchange="D.variaveis[${i}].cat=this.value">${catSel(x.cat||'Alimentação')}</select><input type="number" class="hvenc" value="${x.venc||''}" placeholder="Dia" min="1" max="31" oninput="D.variaveis[${i}].venc=parseInt(this.value)||null"><button class="btn-ghost" onclick="del('variaveis',${i})">${trash}</button></div>`).join('');}
 function addV(){D.variaveis.push({desc:'',valor:0,cat:'Alimentação',venc:null});rlV();}
 function rParcelas(){
   const pago=D.parcelas.filter(x=>x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
@@ -863,7 +877,7 @@ function rParcelas(){
   document.getElementById('pg-parcelas').innerHTML=hdr('Parcelas','Cartões e financiamentos')+
   `<div class="sbar2"><div class="sitem pg"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">✓ Pago</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green)">${fmt(pago)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.parcelas.filter(x=>x.pago).length} parcelas</div></div><div class="sitem ab"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">⏳ Em aberto</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--amber)">${fmt(aberto)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.parcelas.filter(x=>!x.pago).length} parcelas</div></div></div>`+
   `<div class="card"><div class="ct">Parcelas <span class="badge bgr">${fmt(soma(D.parcelas))}</span></div><div class="fhead fh-parc"><span></span><span>Descrição</span><span>Valor/mês</span><span class="hpn">Parcela</span><span class="hpt">Total</span><span></span></div><div id="lp"></div><button class="btn" onclick="addP()" style="margin-top:10px">+ Adicionar</button></div>`;rlP();}
-function rlP(){const el=document.getElementById('lp');if(!el)return;el.innerHTML=D.parcelas.map((x,i)=>`<div class="frow-parc${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="D.parcelas[${i}].pago=!D.parcelas[${i}].pago;rlP();rParcelas()" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Cartão Santander" oninput="D.parcelas[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.parcelas[${i}].valor=parseFloat(this.value)||0"><input type="text" class="hpn" value="${x.parcAtual||''}" placeholder="3/12" oninput="D.parcelas[${i}].parcAtual=this.value"><input type="number" class="hpt" value="${x.parcTotal||''}" placeholder="12" oninput="D.parcelas[${i}].parcTotal=parseInt(this.value)||0"><button class="btn-ghost" onclick="del('parcelas',${i})">${trash}</button></div>`).join('');}
+function rlP(){const el=document.getElementById('lp');if(!el)return;el.innerHTML=D.parcelas.map((x,i)=>`<div class="frow-parc${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="togglePago('parcelas',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Cartão Santander" oninput="D.parcelas[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.parcelas[${i}].valor=parseFloat(this.value)||0"><input type="text" class="hpn" value="${x.parcAtual||''}" placeholder="3/12" oninput="D.parcelas[${i}].parcAtual=this.value"><input type="number" class="hpt" value="${x.parcTotal||''}" placeholder="12" oninput="D.parcelas[${i}].parcTotal=parseInt(this.value)||0"><button class="btn-ghost" onclick="del('parcelas',${i})">${trash}</button></div>`).join('');}
 function addP(){D.parcelas.push({desc:'',valor:0,parcAtual:'',parcTotal:0});rlP();}
 function del(t,i){D[t].splice(i,1);render();}
 
