@@ -604,10 +604,11 @@ async function togglePagoDivida(id){
   const d=DIVIDAS.find(x=>x.id===id);
   if(!d)return;
   const novoPago=!d.pago;
+  const patch=novoPago?{pago:true,status:'Pago'}:{pago:false,status:d.status==='Pago'?'Acordo fechado':d.status};
   try{
-    const{error}=await withTimeout(sb.from('dividas').update({pago:novoPago}).eq('id',id));
+    const{error}=await withTimeout(sb.from('dividas').update(patch).eq('id',id));
     if(error)throw error;
-    d.pago=novoPago;
+    Object.assign(d,patch);
     render();
     if(novoPago){
       toast('Dívida marcada como paga.','ok');
@@ -744,8 +745,8 @@ function rResumo(){
   const pa=D.parcelas.filter(p=>{const c=parseInt((p.parcAtual||'').split('/')[0])||0,t=parseInt((p.parcAtual||'').split('/')[1])||p.parcTotal||0;return t>0&&(t-c)<=2&&(t-c)>=0;});
   const urg=PROCS.filter(p=>{const d=diffD(p.proxima_data);return d!==null&&d>=0&&d<=7;});
   const naoLidos=PROCS.filter(p=>p.nao_lida);
-  const divEmAtraso=DIVIDAS.filter(d=>d.status==='Em atraso'||d.status==='Negociando');
-  const totalDividas=DIVIDAS.filter(d=>d.valor_original).reduce((s,d)=>s+(d.valor_original||0),0);
+  const divEmAtraso=DIVIDAS.filter(d=>!d.pago&&(d.status==='Em atraso'||d.status==='Negociando'));
+  const totalDividas=DIVIDAS.filter(d=>!d.pago&&d.valor_original).reduce((s,d)=>s+(d.valor_original||0),0);
 
   document.getElementById('pg-resumo').innerHTML=hdr('Resumo',ml(MA))+
   (naoLidos.length?`<div class="alert-r">🔔 <strong>${naoLidos.length} processo${naoLidos.length>1?'s têm':' tem'} novidade não lida:</strong> ${naoLidos.map(p=>`${p.titulo||(p.numero||'').substring(0,18)}`).join(' · ')} <a href="#" onclick="navTo('processos');return false" style="color:inherit;text-decoration:underline">ver</a></div>`:'')+
@@ -807,17 +808,17 @@ function rProcessos(){
 function rDividas(){
   const emAtraso=DIVIDAS.filter(d=>d.status==='Em atraso');
   const negociando=DIVIDAS.filter(d=>d.status==='Negociando');
-  const acordadas=DIVIDAS.filter(d=>d.status==='Acordo fechado');
-  const totalOrig=DIVIDAS.filter(d=>d.valor_original).reduce((s,d)=>s+(d.valor_original||0),0);
-  const totalEsperado=DIVIDAS.filter(d=>d.valor_renegociacao).reduce((s,d)=>s+(d.valor_renegociacao||0),0);
+  const pagas=DIVIDAS.filter(d=>d.pago);
+  const totalOrig=DIVIDAS.filter(d=>!d.pago&&d.valor_original).reduce((s,d)=>s+(d.valor_original||0),0);
+  const totalEsperado=DIVIDAS.filter(d=>!d.pago&&d.valor_renegociacao).reduce((s,d)=>s+(d.valor_renegociacao||0),0);
   const economia=totalOrig-totalEsperado;
 
   document.getElementById('pg-dividas').innerHTML=hdr('Dívidas','Controle de renegociações',false)+`
   <div class="mets">
     <div class="met"><div class="ml">Em atraso</div><div class="mv" style="color:var(--red)">${emAtraso.length}</div><div class="ms">aguardando ação</div></div>
     <div class="met"><div class="ml">Negociando</div><div class="mv" style="color:var(--amber)">${negociando.length}</div><div class="ms">em andamento</div></div>
-    <div class="met"><div class="ml">Acordadas</div><div class="mv" style="color:var(--green)">${acordadas.length}</div><div class="ms">acordo fechado</div></div>
-    <div class="met"><div class="ml">Economia esperada</div><div class="mv" style="font-size:${economia>0?'18px':'26px'}">${economia>0?fmt(economia):'—'}</div><div class="ms">vs. valor original</div></div>
+    <div class="met"><div class="ml">Pagas</div><div class="mv" style="color:var(--green)">${pagas.length}</div><div class="ms">quitadas</div></div>
+    <div class="met"><div class="ml">Economia esperada</div><div class="mv" style="font-size:${economia>0?'18px':'26px'}">${economia>0?fmt(economia):'—'}</div><div class="ms">nas pendentes</div></div>
   </div>
   <div id="nao-pagos-section"></div>
     ${DIVIDAS.length===0?`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Nenhuma dívida cadastrada.</p><button class="btn btn-primary" style="margin-top:1rem" onclick="openDivModal()">+ Adicionar dívida</button></div>`:
