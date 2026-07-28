@@ -356,7 +356,8 @@ textarea{resize:vertical;min-height:70px;}
       <div class="mf full"><label>Descrição *</label><input type="text" id="cnome" placeholder="Ex: Pagamento aluguel maio/2026"></div>
       <div class="mf"><label>Categoria</label><select id="ccat"><option>Moradia</option><option>Veículos</option><option>Saúde</option><option>Educação</option><option>Alimentação</option><option>Lazer</option><option>Impostos</option><option>Cartões</option><option>Dívida</option><option>Outros</option></select></div>
       <div class="mf"><label>Valor (R$)</label><input type="number" id="cval" placeholder="0,00"></div>
-      <div class="mf"><label>Data do pagamento</label><input type="date" id="cdata"></div>
+      <div class="mf full"><label>Data do pagamento</label><input type="date" id="cdata"></div>
+      <div class="mf full" id="cvinc-wrap"><label style="display:flex;align-items:center;gap:8px;margin-bottom:0;font-weight:400;color:var(--text);font-size:13px;cursor:pointer;"><input type="checkbox" id="cvinc" checked style="width:16px;height:16px;accent-color:var(--accent);"> Também lançar como despesa variável desse mês</label></div>
     </div>
     <div class="mfoot"><button class="btn" onclick="closeModal('mcomp')">Cancelar</button><button class="btn btn-primary" id="comp-save-btn" onclick="salvarComprovante()">Salvar comprovante</button></div>
   </div>
@@ -612,7 +613,7 @@ async function togglePagoDivida(id){
     render();
     if(novoPago){
       toast('Dívida marcada como paga.','ok');
-      openCompModal({nome:d.credor||'',valor:d.valor_acordado||d.valor_original||'',categoria:'Dívida',data:new Date().toISOString().slice(0,10)});
+      openCompModal({nome:d.credor||'',valor:d.valor_acordado||d.valor_original||'',categoria:'Dívida',data:new Date().toISOString().slice(0,10)},true);
     }else{
       toast('Dívida marcada como não paga.','ok');
     }
@@ -645,12 +646,37 @@ async function salvarComprovante(){
     const{error:upErr}=await withTimeout(sb.storage.from('comprovantes').upload(path,pendingFile),30000);
     if(upErr)throw upErr;
     const{data:urlData}=sb.storage.from('comprovantes').getPublicUrl(path);
-    const comp={user_id:USER.id,nome,categoria:document.getElementById('ccat').value,valor:parseFloat(document.getElementById('cval').value)||null,data_pagamento:document.getElementById('cdata').value||null,arquivo_path:path,arquivo_url:urlData.publicUrl,arquivo_tipo:pendingFile.type};
+    const categoria=document.getElementById('ccat').value;
+    const valor=parseFloat(document.getElementById('cval').value)||null;
+    const dataPag=document.getElementById('cdata').value||null;
+    const comp={user_id:USER.id,nome,categoria,valor,data_pagamento:dataPag,arquivo_path:path,arquivo_url:urlData.publicUrl,arquivo_tipo:pendingFile.type};
     const{error}=await withTimeout(sb.from('comprovantes').insert(comp));
     if(error)throw error;
-    pendingFile=null;closeModal('mcomp');await loadComps();render();toast('Comprovante salvo.','ok');
+    const vincular=document.getElementById('cvinc').checked&&document.getElementById('cvinc-wrap').style.display!=='none';
+    if(vincular&&valor){
+      await lancarComoVariavel(nome,valor,categoria,dataPag);
+    }
+    pendingFile=null;closeModal('mcomp');await loadComps();render();toast(vincular&&valor?'Comprovante salvo e lançado em Variáveis.':'Comprovante salvo.','ok');
   }catch(e){toast('Erro ao salvar comprovante: '+e.message,'err');}
   btn.innerHTML='Salvar comprovante';btn.disabled=false;
+}
+async function lancarComoVariavel(desc,valor,cat,dataPag){
+  const dataRef=dataPag?new Date(dataPag+'T00:00:00'):new Date();
+  const mesRef={y:dataRef.getFullYear(),m:dataRef.getMonth()};
+  const mesKey=mk(mesRef);
+  const item={desc,valor,cat:CATS.includes(cat)?cat:'Outros',venc:null,pago:true};
+  if(mesKey===mk(MA)){
+    D.variaveis.push(item);
+    if(CP==='variaveis')rVariaveis();
+    await salvarMesSilencioso();
+    return;
+  }
+  try{
+    const{data:mesAtual}=await withTimeout(sb.from('meses').select('dados').eq('user_id',USER.id).eq('mes',mesKey).maybeSingle());
+    const base=mesAtual?.dados||{fixas:[],variaveis:[],parcelas:[],receitas:[],receitasFixas:[],areceber:[]};
+    const variaveis=[...(base.variaveis||[]),item];
+    await withTimeout(sb.from('meses').upsert({user_id:USER.id,mes:mesKey,dados:{...base,variaveis}},{onConflict:'user_id,mes'}));
+  }catch(e){toast('Comprovante salvo, mas não consegui lançar em Variáveis: '+e.message,'err');}
 }
 async function deleteComp(id,path){
   if(!confirm('Excluir comprovante?'))return;
@@ -682,7 +708,7 @@ function openDivModal(d=null){
   Object.entries(f).forEach(([id,v])=>{const el=document.getElementById(id);if(el)el.value=v;});
   document.getElementById('mdiv').style.display='flex';
 }
-function openCompModal(prefill=null){
+function openCompModal(prefill=null,jaLancado=false){
   pendingFile=null;
   document.getElementById('preview-wrap').style.display='none';
   document.getElementById('dz').style.display='block';
@@ -692,6 +718,9 @@ function openCompModal(prefill=null){
   const ccat=document.getElementById('ccat');
   if(prefill?.categoria&&[...ccat.options].some(o=>o.value===prefill.categoria))ccat.value=prefill.categoria;
   else ccat.value='Outros';
+  const cvincWrap=document.getElementById('cvinc-wrap'),cvinc=document.getElementById('cvinc');
+  cvincWrap.style.display=jaLancado?'none':'block';
+  cvinc.checked=!jaLancado;
   document.getElementById('comp-save-btn').innerHTML='Salvar comprovante';
   document.getElementById('comp-save-btn').disabled=false;
   document.getElementById('mcomp').style.display='flex';
@@ -705,7 +734,7 @@ function togglePago(tipo,i){
   agendarAutoSave();
   if(item.pago){
     const categoria=tipo==='parcelas'?'Cartões':(item.cat||'Outros');
-    openCompModal({nome:item.desc||'',valor:item.valor||'',categoria,data:new Date().toISOString().slice(0,10)});
+    openCompModal({nome:item.desc||'',valor:item.valor||'',categoria,data:new Date().toISOString().slice(0,10)},true);
   }
 }
 function closeModal(id){document.getElementById(id).style.display='none';}
