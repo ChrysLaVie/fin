@@ -354,7 +354,7 @@ textarea{resize:vertical;min-height:70px;}
     </div>
     <div class="mgrid">
       <div class="mf full"><label>Descrição *</label><input type="text" id="cnome" placeholder="Ex: Pagamento aluguel maio/2026"></div>
-      <div class="mf"><label>Categoria</label><select id="ccat"><option>Moradia</option><option>Veículos</option><option>Saúde</option><option>Educação</option><option>Alimentação</option><option>Lazer</option><option>Impostos</option><option>Cartões</option><option>Dívida</option><option>Outros</option></select></div>
+      <div class="mf"><label>Categoria</label><select id="ccat"><option>Moradia</option><option>Manutenção da casa</option><option>Veículos</option><option>Combustível</option><option>Saúde</option><option>Educação</option><option>Alimentação</option><option>Vestuário</option><option>Elliot</option><option>Beleza</option><option>Lazer</option><option>Presentes</option><option>Doações</option><option>Impostos</option><option>Seguros</option><option>Cartões</option><option>Assinaturas</option><option>Investimentos</option><option>Dívida</option><option>Outros</option></select></div>
       <div class="mf"><label>Valor (R$)</label><input type="number" id="cval" placeholder="0,00"></div>
       <div class="mf full"><label>Data do pagamento</label><input type="date" id="cdata"></div>
       <div class="mf full" id="cvinc-wrap"><label style="display:flex;align-items:center;gap:8px;margin-bottom:0;font-weight:400;color:var(--text);font-size:13px;cursor:pointer;"><input type="checkbox" id="cvinc" checked style="width:16px;height:16px;accent-color:var(--accent);"> Também lançar como despesa variável desse mês</label></div>
@@ -375,9 +375,9 @@ const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 window.sb=sb;
 
 const MN=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-const CATS=['Moradia','Veículos','Saúde','Educação','Alimentação','Lazer','Impostos','Cartões','Outros'];
-const TREC=['Salário','Freelance','Aluguel recebido','Reembolso','Outros'];
-const CC={Moradia:'#378ADD',Veículos:'#534AB7',Saúde:'#1D9E75',Educação:'#3B6D11',Alimentação:'#BA7517',Lazer:'#D4537E',Impostos:'#E24B4A',Cartões:'#D85A30',Outros:'#888780'};
+const CATS=['Moradia','Manutenção da casa','Veículos','Combustível','Saúde','Educação','Alimentação','Vestuário','Elliot','Beleza','Lazer','Presentes','Doações','Impostos','Seguros','Cartões','Assinaturas','Investimentos','Outros'];
+const TREC=['Clientes','Consultoria','Aluguel recebido','Rendimentos','Reembolso','Restituição IR','Venda de itens','Outros'];
+const CC={Moradia:'#378ADD','Manutenção da casa':'#5FA8E0',Veículos:'#534AB7',Combustível:'#8A7FD1',Saúde:'#1D9E75',Educação:'#3B6D11',Alimentação:'#BA7517',Vestuário:'#C25B9E',Elliot:'#2FA6A1',Beleza:'#D98BB5',Lazer:'#D4537E',Presentes:'#E08E4F',Doações:'#4F9E8C',Impostos:'#E24B4A',Seguros:'#6B7A8F',Cartões:'#D85A30',Assinaturas:'#9C6ADE',Investimentos:'#2E7D5B',Outros:'#888780'};
 const SBM={'Em andamento':'bb','Aguardando audiência':'ba','Aguardando sentença':'ba','Recurso pendente':'br','Encerrado — favorável':'bg','Encerrado — desfavorável':'br','Suspenso':'bgr'};
 const SDM={'Em atraso':'br','Negociando':'ba','Acordo fechado':'bg','Pago':'bgr'};
 
@@ -915,16 +915,16 @@ const REC_IDS={receitasFixas:'lrf',receitas:'lr',areceber:'lar'};
 function rlR(t,id){
   const el=document.getElementById(id);if(!el)return;
   if(t==='areceber'){
-    el.innerHTML=D[t].map((x,i)=>`<div class="frow-rec" style="margin-bottom:4px;grid-template-columns:34px 1fr 110px 130px 34px"><button class="tgl" onclick="marcarRecebido(${i})" title="Marcar como recebido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D['${t}'][${i}].desc=this.value;agendarAutoSave()"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D['${t}'][${i}].valor=parseFloat(this.value)||0;agendarAutoSave()"><select class="htipo" onchange="D['${t}'][${i}].tipo=this.value;agendarAutoSave()">${tSel(x.tipo||'Salário')}</select><button class="btn-ghost" onclick="del('${t}',${i})">${trash}</button></div>`).join('');
+    el.innerHTML=D[t].map((x,i)=>`<div class="frow-rec" style="margin-bottom:4px;grid-template-columns:34px 1fr 110px 130px 34px"><button class="tgl" onclick="marcarRecebido(${i})" title="Marcar como recebido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D['${t}'][${i}].desc=this.value;agendarAutoSave()"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D['${t}'][${i}].valor=parseFloat(this.value)||0;agendarAutoSave()"><select class="htipo" onchange="D['${t}'][${i}].tipo=this.value;agendarAutoSave()">${tSel(x.tipo||'Clientes')}</select><button class="btn-ghost" onclick="del('${t}',${i})">${trash}</button></div>`).join('');
   } else {
-    el.innerHTML=D[t].map((x,i)=>`<div class="frow-rec" style="margin-bottom:4px"><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D['${t}'][${i}].desc=this.value;agendarAutoSave()"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D['${t}'][${i}].valor=parseFloat(this.value)||0;agendarAutoSave()"><select class="htipo" onchange="D['${t}'][${i}].tipo=this.value;agendarAutoSave()">${tSel(x.tipo||'Salário')}</select><button class="btn-ghost" onclick="del('${t}',${i})">${trash}</button></div>`).join('');
+    el.innerHTML=D[t].map((x,i)=>`<div class="frow-rec" style="margin-bottom:4px"><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D['${t}'][${i}].desc=this.value;agendarAutoSave()"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D['${t}'][${i}].valor=parseFloat(this.value)||0;agendarAutoSave()"><select class="htipo" onchange="D['${t}'][${i}].tipo=this.value;agendarAutoSave()">${tSel(x.tipo||'Clientes')}</select><button class="btn-ghost" onclick="del('${t}',${i})">${trash}</button></div>`).join('');
   }
 }
-function addR(t){D[t].push({desc:'',valor:0,tipo:'Salário'});rlR(t,REC_IDS[t]);agendarAutoSave();}
+function addR(t){D[t].push({desc:'',valor:0,tipo:'Clientes'});rlR(t,REC_IDS[t]);agendarAutoSave();}
 function marcarRecebido(i){
   const item=D.areceber.splice(i,1)[0];
   if(!item)return;
-  D.receitas.push({desc:item.desc,valor:item.valor,tipo:item.tipo||'Salário'});
+  D.receitas.push({desc:item.desc,valor:item.valor,tipo:item.tipo||'Clientes'});
   rReceitas();
   agendarAutoSave();
   toast('Movido para Receitas avulsas — salvando sozinho em instantes.','ok');
