@@ -600,6 +600,23 @@ async function salvarDivida(){
   btn.textContent=orig;btn.disabled=false;
 }
 async function deleteDivida(id){if(!confirm('Excluir dívida?'))return;try{const{error}=await withTimeout(sb.from('dividas').delete().eq('id',id));if(error)throw error;await loadDividas();render();toast('Dívida excluída.','ok');}catch(e){toast('Erro ao excluir: '+e.message,'err');}}
+async function togglePagoDivida(id){
+  const d=DIVIDAS.find(x=>x.id===id);
+  if(!d)return;
+  const novoPago=!d.pago;
+  try{
+    const{error}=await withTimeout(sb.from('dividas').update({pago:novoPago}).eq('id',id));
+    if(error)throw error;
+    d.pago=novoPago;
+    render();
+    if(novoPago){
+      toast('Dívida marcada como paga.','ok');
+      openCompModal({nome:d.credor||'',valor:d.valor_acordado||d.valor_original||'',categoria:'Dívida',data:new Date().toISOString().slice(0,10)});
+    }else{
+      toast('Dívida marcada como não paga.','ok');
+    }
+  }catch(e){toast('Erro: '+e.message,'err');}
+}
 
 async function loadComps(){if(!USER)return;const{data,error}=await withTimeout(sb.from('comprovantes').select('*').eq('user_id',USER.id).order('created_at',{ascending:false}));if(error)throw error;COMPS=data||[];}
 
@@ -805,10 +822,10 @@ function rDividas(){
   <div id="nao-pagos-section"></div>
     ${DIVIDAS.length===0?`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Nenhuma dívida cadastrada.</p><button class="btn btn-primary" style="margin-top:1rem" onclick="openDivModal()">+ Adicionar dívida</button></div>`:
   `<div class="div-grid">${DIVIDAS.map(d=>{
-    const cls=d.status==='Em atraso'?'critica':d.status==='Negociando'?'negociando':d.status==='Acordo fechado'?'acordo':'';
+    const cls=d.pago?'acordo':d.status==='Em atraso'?'critica':d.status==='Negociando'?'negociando':d.status==='Acordo fechado'?'acordo':'';
     return`<div class="div-card ${cls}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">
-        <div><div style="font-size:15px;font-weight:500">${esc(d.credor)}</div><div style="font-size:12px;color:var(--muted)">${d.tipo||'—'}</div></div>
+        <div style="display:flex;align-items:center;gap:8px;min-width:0"><button class="tgl${d.pago?' ok':''}" onclick="togglePagoDivida('${d.id}')" title="${d.pago?'Marcar como não paga':'Marcar como paga'}" style="flex-shrink:0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><div style="min-width:0"><div style="font-size:15px;font-weight:500">${esc(d.credor)}</div><div style="font-size:12px;color:var(--muted)">${d.tipo||'—'}</div></div></div>
         <div style="display:flex;gap:4px;flex-shrink:0"><button class="btn-ghost" onclick="openDivModal(DIVIDAS.find(x=>x.id==='${d.id}'))">${editIc}</button><button class="btn-ghost" onclick="deleteDivida('${d.id}')">${trash}</button></div>
       </div>
       <div style="margin-bottom:.75rem"><span class="badge ${SDM[d.status]||'bgr'}">${d.status}</span></div>
