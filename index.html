@@ -637,6 +637,19 @@ function navTo(p){CP=p;document.querySelectorAll('.ni[data-p]').forEach(el=>el.c
 function openDrawer(){document.getElementById('drawer').classList.add('open');}
 function closeDrawer(){document.getElementById('drawer').classList.remove('open');}
 
+// No modo "instalado" do iPhone, o app não recarrega ao voltar de segundo plano —
+// ele só retoma de onde parou. Isso faz o menu (ou um modal) continuar aberto
+// de uma sessão pra outra. Aqui a gente força fechar tudo sempre que o app
+// volta a ficar visível, pra sempre abrir "limpo".
+function fecharTudoQueEstaAberto(){
+  closeDrawer();
+  document.querySelectorAll('.modal-ov').forEach(m => { m.style.display = 'none'; });
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') fecharTudoQueEstaAberto();
+});
+window.addEventListener('pageshow', fecharTudoQueEstaAberto);
+
 function render(){
   ['resumo','receitas','fixas','variaveis','parcelas','processos','dividas','comprovantes'].forEach(p=>document.getElementById('pg-'+p).style.display=p===CP?'block':'none');
   if(CP==='resumo')rResumo();else if(CP==='receitas')rReceitas();else if(CP==='fixas')rFixas();else if(CP==='variaveis')rVariaveis();else if(CP==='parcelas')rParcelas();else if(CP==='processos')rProcessos();else if(CP==='dividas')rDividas();else if(CP==='comprovantes')rComprovantes();
