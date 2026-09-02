@@ -719,7 +719,7 @@ function rResumo(){
   const pa=D.parcelas.filter(p=>{const c=parseInt((p.parcAtual||'').split('/')[0])||0,t=parseInt((p.parcAtual||'').split('/')[1])||p.parcTotal||0;return t>0&&(t-c)<=2&&(t-c)>=0;});
   const urg=PROCS.filter(p=>{const d=diffD(p.proxima_data);return d!==null&&d>=0&&d<=7;});
   const divEmAtraso=DIVIDAS.filter(d=>d.status==='Em atraso'||d.status==='Negociando');
-  const totalDividas=DIVIDAS.filter(d=>d.valor_original).reduce((s,d)=>s+(d.valor_original||0),0);
+  const totalDividas=DIVIDAS.filter(d=>d.valor_original&&d.status!=='Pago').reduce((s,d)=>s+(d.valor_original||0),0);
 
   document.getElementById('pg-resumo').innerHTML=hdr('Resumo',ml(MA))+
   (urg.length?`<div class="alert-r">⚖️ <strong>${urg.length} processo${urg.length>1?'s':''} com prazo urgente:</strong> ${urg.map(p=>`${(p.numero||'').substring(0,18)}… (${fd2(p.proxima_data)})`).join(' · ')}</div>`:'')+
@@ -781,29 +781,22 @@ function rDividas(){
   const emAtraso=DIVIDAS.filter(d=>d.status==='Em atraso');
   const negociando=DIVIDAS.filter(d=>d.status==='Negociando');
   const acordadas=DIVIDAS.filter(d=>d.status==='Acordo fechado');
-  const totalOrig=DIVIDAS.filter(d=>d.valor_original).reduce((s,d)=>s+(d.valor_original||0),0);
-  const totalEsperado=DIVIDAS.filter(d=>d.valor_renegociacao).reduce((s,d)=>s+(d.valor_renegociacao||0),0);
+  const pagas=DIVIDAS.filter(d=>d.status==='Pago');
+  const ativas=DIVIDAS.filter(d=>d.status!=='Pago');
+  const totalOrig=ativas.filter(d=>d.valor_original).reduce((s,d)=>s+(d.valor_original||0),0);
+  const totalEsperado=ativas.filter(d=>d.valor_renegociacao).reduce((s,d)=>s+(d.valor_renegociacao||0),0);
   const economia=totalOrig-totalEsperado;
 
-  document.getElementById('pg-dividas').innerHTML=hdr('Dívidas','Controle de renegociações',false)+`
-  <div class="mets">
-    <div class="met"><div class="ml">Em atraso</div><div class="mv" style="color:var(--red)">${emAtraso.length}</div><div class="ms">aguardando ação</div></div>
-    <div class="met"><div class="ml">Negociando</div><div class="mv" style="color:var(--amber)">${negociando.length}</div><div class="ms">em andamento</div></div>
-    <div class="met"><div class="ml">Acordadas</div><div class="mv" style="color:var(--green)">${acordadas.length}</div><div class="ms">acordo fechado</div></div>
-    <div class="met"><div class="ml">Economia esperada</div><div class="mv" style="font-size:${economia>0?'18px':'26px'}">${economia>0?fmt(economia):'—'}</div><div class="ms">vs. valor original</div></div>
-  </div>
-  <div id="nao-pagos-section"></div>
-    ${DIVIDAS.length===0?`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Nenhuma dívida cadastrada.</p><button class="btn btn-primary" style="margin-top:1rem" onclick="openDivModal()">+ Adicionar dívida</button></div>`:
-  `<div class="div-grid">${DIVIDAS.map(d=>{
-    const cls=d.status==='Em atraso'?'critica':d.status==='Negociando'?'negociando':d.status==='Acordo fechado'?'acordo':'';
-    return`<div class="div-card ${cls}">
+  const cardDivida=d=>{
+    const cls=d.status==='Pago'?'acordo':d.status==='Em atraso'?'critica':d.status==='Negociando'?'negociando':d.status==='Acordo fechado'?'acordo':'';
+    return`<div class="div-card ${cls}"${d.status==='Pago'?' style="opacity:.65"':''}>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">
         <div><div style="font-size:15px;font-weight:500">${esc(d.credor)}</div><div style="font-size:12px;color:var(--muted)">${d.tipo||'—'}</div></div>
         <div style="display:flex;gap:4px;flex-shrink:0"><button class="btn-ghost" onclick="openDivModal(DIVIDAS.find(x=>x.id==='${d.id}'))">${editIc}</button><button class="btn-ghost" onclick="deleteDivida('${d.id}')">${trash}</button></div>
       </div>
-      <div style="margin-bottom:.75rem"><span class="badge ${SDM[d.status]||'bgr'}">${d.status}</span></div>
+      <div style="margin-bottom:.75rem"><span class="badge ${SDM[d.status]||'bgr'}">${d.status==='Pago'?'✓ Pago':d.status}</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
-        ${d.valor_original?`<div><span style="color:var(--muted);display:block">Valor original</span><span style="font-weight:500;color:var(--red)">${fmt(d.valor_original)}</span></div>`:''}
+        ${d.valor_original?`<div><span style="color:var(--muted);display:block">Valor original</span><span style="font-weight:500;color:${d.status==='Pago'?'var(--muted)':'var(--red)'}">${fmt(d.valor_original)}</span></div>`:''}
         ${d.valor_renegociacao?`<div><span style="color:var(--muted);display:block">Meta renegociação</span><span style="font-weight:500;color:var(--amber)">${fmt(d.valor_renegociacao)}</span></div>`:''}
         ${d.valor_acordado?`<div><span style="color:var(--muted);display:block">Valor acordado</span><span style="font-weight:500;color:var(--green)">${fmt(d.valor_acordado)}</span></div>`:''}
         ${d.previsao_reneg?`<div><span style="color:var(--muted);display:block">Previsão</span><span style="font-weight:500">${fd2(d.previsao_reneg)}</span></div>`:''}
@@ -811,7 +804,19 @@ function rDividas(){
       </div>
       ${d.observacoes?`<div style="margin-top:.75rem;padding:.6rem .75rem;background:var(--surface2);border-radius:8px;font-size:13px;color:var(--muted)">${esc(d.observacoes)}</div>`:''}
     </div>`;
-  }).join('')}</div>`}`;
+  };
+
+  document.getElementById('pg-dividas').innerHTML=hdr('Dívidas','Controle de renegociações',false)+`
+  <div class="mets">
+    <div class="met"><div class="ml">Em atraso</div><div class="mv" style="color:var(--red)">${emAtraso.length}</div><div class="ms">aguardando ação</div></div>
+    <div class="met"><div class="ml">Negociando</div><div class="mv" style="color:var(--amber)">${negociando.length}</div><div class="ms">em andamento</div></div>
+    <div class="met"><div class="ml">Pagas</div><div class="mv" style="color:var(--green)">${pagas.length}</div><div class="ms">quitadas</div></div>
+    <div class="met"><div class="ml">Economia esperada</div><div class="mv" style="font-size:${economia>0?'18px':'26px'}">${economia>0?fmt(economia):'—'}</div><div class="ms">vs. valor original (só ativas)</div></div>
+  </div>
+  <div id="nao-pagos-section"></div>
+    ${DIVIDAS.length===0?`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Nenhuma dívida cadastrada.</p><button class="btn btn-primary" style="margin-top:1rem" onclick="openDivModal()">+ Adicionar dívida</button></div>`:
+  `<div class="div-grid">${ativas.map(cardDivida).join('')}</div>
+  ${pagas.length?`<div style="margin-top:1.5rem"><div style="font-size:13px;font-weight:500;color:var(--muted);margin-bottom:.75rem">✓ Quitadas (${pagas.length})</div><div class="div-grid">${pagas.map(cardDivida).join('')}</div></div>`:''}`}`;
   loadNaoPagosMesAnterior().then(naoPagos=>{
     if(naoPagos.length>0){
       const np=document.getElementById('nao-pagos-section');
