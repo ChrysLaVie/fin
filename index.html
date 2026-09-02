@@ -480,12 +480,22 @@ async function loadData(){
   D=data?.dados?{...vazio,...data.dados}:{...vazio};
   // Se esse mês não tem nenhuma receita lançada ainda, preenche com as
   // receitas fixas (salário, benefício etc.) — do próprio mês, se já tiver
-  // sido configurado antes, ou do mês anterior mais próximo que tiver.
+  // sido configurado antes, ou do mês anterior mais próximo que tiver —
+  // e soma o saldo (positivo ou negativo) que sobrou do mês anterior.
   if(!D.receitas||D.receitas.length===0){
     if(!D.receitasFixas||D.receitasFixas.length===0){
       D.receitasFixas=await buscarReceitasFixasAnteriores();
     }
-    if(D.receitasFixas.length)D.receitas=D.receitasFixas.map(x=>({...x}));
+    D.receitas=D.receitasFixas.length?D.receitasFixas.map(x=>({...x})):[];
+    const saldoAnt=await buscarSaldoMesAnterior();
+    if(saldoAnt!==null&&Math.round(saldoAnt*100)!==0){
+      D.receitas.push({desc:'Saldo do mês anterior',tipo:'Salário',valor:saldoAnt});
+    }
+  }
+  // "A receber" que ainda não foi recebido no mês anterior continua
+  // aparecendo nos meses seguintes, até você marcar como recebido (removendo).
+  if(!D.areceber||D.areceber.length===0){
+    D.areceber=await buscarAReceberAnterior();
   }
 }
 async function buscarReceitasFixasAnteriores(){
@@ -500,6 +510,23 @@ async function buscarReceitasFixasAnteriores(){
     cursor=prv(cursor);
   }
   return[];
+}
+async function buscarSaldoMesAnterior(){
+  try{
+    const{data,error}=await withTimeout(sb.from('meses').select('dados').eq('user_id',USER.id).eq('mes',mk(prv(MA))).maybeSingle());
+    if(error||!data?.dados)return null;
+    const d=data.dados;
+    const rec=soma(d.receitas);
+    const desp=soma(d.fixas)+soma(d.variaveis)+soma(d.parcelas);
+    return Math.round((rec-desp)*100)/100;
+  }catch(e){return null;}
+}
+async function buscarAReceberAnterior(){
+  try{
+    const{data,error}=await withTimeout(sb.from('meses').select('dados').eq('user_id',USER.id).eq('mes',mk(prv(MA))).maybeSingle());
+    if(error||!data?.dados?.areceber?.length)return[];
+    return data.dados.areceber.map(x=>({...x}));
+  }catch(e){return[];}
 }
 async function salvarMes(){
   if(saving)return;saving=true;
@@ -683,7 +710,9 @@ function catSel(v){return CATS.map(c=>`<option${c===v?' selected':''}>${c}</opti
 function tSel(v){return TREC.map(c=>`<option${c===v?' selected':''}>${c}</option>`).join('');}
 
 function rResumo(){
-  const rec=soma(D.receitas),fix=soma(D.fixas),vari=soma(D.variaveis),parc=soma(D.parcelas),total=fix+vari+parc,saldo=rec-total,pct=rec>0?Math.min(100,Math.round(total/rec*100)):0;
+  const rec=soma(D.receitas),fix=soma(D.fixas),vari=soma(D.variaveis),parc=soma(D.parcelas),total=fix+vari+parc,saldo=rec-total;
+  const pctBruto=rec>0?Math.round(total/rec*100):0;
+  const pctLabel=pctBruto>100?`-${pctBruto-100}%`:`${pctBruto}%`;
   const cm={};[...D.fixas,...D.variaveis].forEach(x=>{const c=x.cat||'Outros';cm[c]=(cm[c]||0)+(parseFloat(x.valor)||0);});D.parcelas.forEach(x=>{cm['Cartões']=(cm['Cartões']||0)+(parseFloat(x.valor)||0);});
   const sc=Object.entries(cm).sort((a,b)=>b[1]-a[1]),mx=sc[0]?sc[0][1]:1;
   const venc=[...D.fixas,...D.variaveis].filter(x=>x.venc).sort((a,b)=>a.venc-b.venc),dh=hoje.getDate();
@@ -697,7 +726,7 @@ function rResumo(){
   (divEmAtraso.length?`<div class="alert-a">⚠️ <strong>${divEmAtraso.length} dívida${divEmAtraso.length>1?'s':''} pendente${divEmAtraso.length>1?'s':''} de renegociação</strong> — total: ${fmt(totalDividas)}</div>`:'')+
   `<div class="mets">
     <div class="met"><div class="ml">Receita</div><div class="mv" style="color:var(--green)">${fmt(rec)}</div><div class="ms">${D.receitas.length} fonte${D.receitas.length!==1?'s':''}</div></div>
-    <div class="met"><div class="ml">Gastos</div><div class="mv" style="color:var(--red)">${fmt(total)}</div><div class="ms">${pct}% da receita</div></div>
+    <div class="met"><div class="ml">Gastos</div><div class="mv" style="color:var(--red)">${fmt(total)}</div><div class="ms"${pctBruto>100?' style="color:var(--red)"':''}>${pctLabel} da receita</div></div>
     <div class="met"><div class="ml">Saldo</div><div class="mv" style="color:${saldo>=0?'var(--green)':'var(--red)'}">${fmt(saldo)}</div><div class="ms">${saldo>=0?'sobra':'falta'} no mês</div></div>
     <div class="met"><div class="ml">Dívidas pendentes</div><div class="mv" style="color:var(--red);font-size:20px">${totalDividas>0?fmt(totalDividas):'—'}</div><div class="ms">${divEmAtraso.length} para renegociar</div></div>
   </div>
