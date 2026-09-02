@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Finanças & Processos</title>
+<title>finn. — Finanças & Processos</title>
 
 <!-- PWA: instalação como app -->
 <link rel="manifest" href="/manifest.json">
@@ -417,7 +417,7 @@ function toggleTheme(){dark=!dark;document.documentElement.setAttribute('data-th
 if(dark)document.getElementById('tlbl').textContent='Tema claro';
 
 let USER=null,hoje=new Date(),MA={y:hoje.getFullYear(),m:hoje.getMonth()};
-let D={fixas:[],variaveis:[],parcelas:[],receitas:[],areceber:[]};
+let D={fixas:[],variaveis:[],parcelas:[],receitas:[],areceber:[],receitasFixas:[]};
 let PROCS=[],DIVIDAS=[],COMPS=[];
 let CP='resumo',saving=false,editProcId=null,editDivId=null,pendingFile=null;
 
