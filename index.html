@@ -414,6 +414,7 @@ function toggleTheme(){dark=!dark;document.documentElement.setAttribute('data-th
 if(dark)document.getElementById('tlbl').textContent='Tema claro';
 
 let USER=null,hoje=new Date(),MA={y:hoje.getFullYear(),m:hoje.getMonth()};
+let dirty=false;
 let D={fixas:[],variaveis:[],parcelas:[],receitas:[],areceber:[],receitasFixas:[]};
 let PROCS=[],DIVIDAS=[],COMPS=[];
 let CP='resumo',saving=false,editProcId=null,editDivId=null,pendingFile=null;
@@ -533,6 +534,7 @@ async function salvarMes(){
   try{
     const{error}=await withTimeout(sb.from('meses').upsert({user_id:USER.id,mes:mk(MA),dados:D},{onConflict:'user_id,mes'}));
     if(error)throw error;
+    dirty=false;
     fab.innerHTML=`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Salvo!`;
     fab.style.background='#1D9E75';
     toast('Mês salvo com sucesso.','ok');
@@ -543,7 +545,24 @@ async function salvarMes(){
   }
   setTimeout(()=>{setFab();fab.disabled=false;saving=false;},2500);
 }
-async function mudaMes(d){MA=d>0?nxt(MA):prv(MA);document.getElementById('mm').textContent=ml(MA);try{await loadData();}catch(e){toast('Erro ao carregar mês: '+e.message,'err');}render();}
+// Salva em segundo plano, sem mexer no botão nem incomodar com pop-ups —
+// usado pelo autosave e antes de trocar de mês/sair, pra nunca perder o
+// que já foi digitado só porque esqueceu de apertar "Salvar mês".
+async function salvarSilencioso(){
+  if(!USER||saving)return;
+  try{
+    const{error}=await sb.from('meses').upsert({user_id:USER.id,mes:mk(MA),dados:D},{onConflict:'user_id,mes'});
+    if(error)throw error;
+    dirty=false;
+  }catch(e){
+    console.error('Autosave falhou, vai tentar de novo em breve:',e);
+  }
+}
+setInterval(()=>{if(dirty)salvarSilencioso();},8000);
+async function mudaMes(d){
+  if(dirty)await salvarSilencioso();
+  MA=d>0?nxt(MA):prv(MA);document.getElementById('mm').textContent=ml(MA);try{await loadData();}catch(e){toast('Erro ao carregar mês: '+e.message,'err');}render();
+}
 
 async function loadProcs(){if(!USER)return;const{data,error}=await withTimeout(sb.from('processos').select('*').eq('user_id',USER.id).order('created_at',{ascending:false}));if(error)throw error;PROCS=data||[];}
 async function salvarProcesso(){
@@ -715,8 +734,19 @@ function fecharTudoQueEstaAberto(){
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') fecharTudoQueEstaAberto();
+  else if (document.visibilityState === 'hidden' && dirty) salvarSilencioso();
 });
 window.addEventListener('pageshow', fecharTudoQueEstaAberto);
+window.addEventListener('beforeunload', () => { if (dirty) salvarSilencioso(); });
+
+// Marca "tem coisa não salva" em qualquer edição dentro do app (texto, número,
+// select, checkbox de pago/fixa/recebido), pra alimentar o autosave — em vez
+// de precisar lembrar de marcar isso em cada campo um por um.
+document.getElementById('main').addEventListener('input', () => { dirty = true; });
+document.getElementById('main').addEventListener('change', () => { dirty = true; });
+document.getElementById('main').addEventListener('click', (e) => {
+  if (e.target.closest('.tgl, .btn-ghost, .btn')) dirty = true;
+});
 
 function render(){
   ['resumo','receitas','fixas','variaveis','processos','dividas','comprovantes'].forEach(p=>document.getElementById('pg-'+p).style.display=p===CP?'block':'none');
