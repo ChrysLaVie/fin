@@ -379,7 +379,7 @@ window.sb=sb;
 
 const MN=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const CATS=['Moradia','Veículos','Saúde','Educação','Alimentação','Lazer','Impostos','Cartões','Outros'];
-const TREC=['Salário','Freelance','Aluguel recebido','Reembolso','Outros'];
+const TREC=['La Vie','Freelance','Aluguel recebido','Reembolso','Outros'];
 const CC={Moradia:'#378ADD',Veículos:'#534AB7',Saúde:'#1D9E75',Educação:'#3B6D11',Alimentação:'#BA7517',Lazer:'#D4537E',Impostos:'#E24B4A',Cartões:'#D85A30',Outros:'#888780'};
 const SBM={'Em andamento':'bb','Aguardando audiência':'ba','Aguardando sentença':'ba','Recurso pendente':'br','Encerrado — favorável':'bg','Encerrado — desfavorável':'br','Suspenso':'bgr'};
 const SDM={'Em atraso':'br','Negociando':'ba','Acordo fechado':'bg','Pago':'bgr'};
@@ -491,7 +491,7 @@ async function loadData(){
     D.receitas=D.receitasFixas.length?D.receitasFixas.map(x=>({...x})):[];
     const saldoAnt=await buscarSaldoMesAnterior();
     if(saldoAnt!==null&&Math.round(saldoAnt*100)!==0){
-      D.receitas.push({desc:'Saldo do mês anterior',tipo:'Salário',valor:saldoAnt});
+      D.receitas.push({desc:'Saldo do mês anterior',tipo:'La Vie',valor:saldoAnt});
     }
   }
   // "A receber" que ainda não foi recebido no mês anterior continua
@@ -884,10 +884,10 @@ function rReceitas(){
 function rlR(t,id){
   const el=document.getElementById(id);if(!el)return;
   if(t==='areceber'){
-    el.innerHTML=D.areceber.map((x,i)=>`<div class="frow-areceber" style="margin-bottom:4px"><button class="tgl" onclick="marcarRecebido(${i})" title="Marcar como recebido (move pra Confirmadas)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D.areceber[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.areceber[${i}].valor=parseFloat(this.value)||0"><select class="htipo" onchange="D.areceber[${i}].tipo=this.value">${tSel(x.tipo||'Salário')}</select><button class="btn-ghost" onclick="del('areceber',${i})">${trash}</button></div>`).join('');
+    el.innerHTML=D.areceber.map((x,i)=>`<div class="frow-areceber" style="margin-bottom:4px"><button class="tgl" onclick="marcarRecebido(${i})" title="Marcar como recebido (move pra Confirmadas)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D.areceber[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.areceber[${i}].valor=parseFloat(this.value)||0"><select class="htipo" onchange="D.areceber[${i}].tipo=this.value">${tSel(x.tipo||'La Vie')}</select><button class="btn-ghost" onclick="del('areceber',${i})">${trash}</button></div>`).join('');
     return;
   }
-  el.innerHTML=D[t].map((x,i)=>`<div class="frow-rec" style="margin-bottom:4px"><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D['${t}'][${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D['${t}'][${i}].valor=parseFloat(this.value)||0"><select class="htipo" onchange="D['${t}'][${i}].tipo=this.value">${tSel(x.tipo||'Salário')}</select><button class="btn-ghost" onclick="del('${t}',${i})">${trash}</button></div>`).join('');
+  el.innerHTML=D[t].map((x,i)=>`<div class="frow-rec" style="margin-bottom:4px"><input type="text" value="${esc(x.desc)}" placeholder="Descrição" oninput="D['${t}'][${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D['${t}'][${i}].valor=parseFloat(this.value)||0"><select class="htipo" onchange="D['${t}'][${i}].tipo=this.value">${tSel(x.tipo||'La Vie')}</select><button class="btn-ghost" onclick="del('${t}',${i})">${trash}</button></div>`).join('');
 }
 function marcarRecebido(i){
   const item=D.areceber.splice(i,1)[0];
@@ -896,7 +896,7 @@ function marcarRecebido(i){
   rlR('receitas','lr');
   toast('Movido para Confirmadas — não esquece de salvar o mês.','ok');
 }
-function addR(t){D[t].push({desc:'',valor:0,tipo:'Salário'});rlR(t,t==='receitas'?'lr':t==='areceber'?'lar':'lrf');}
+function addR(t){D[t].push({desc:'',valor:0,tipo:'La Vie'});rlR(t,t==='receitas'?'lr':t==='areceber'?'lar':'lrf');}
 function rFixas(){
   const pago=D.fixas.filter(x=>x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
   const aberto=D.fixas.filter(x=>!x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
