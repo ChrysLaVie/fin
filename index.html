@@ -246,7 +246,6 @@ textarea{resize:vertical;min-height:70px;}
     <div class="ni" data-p="receitas" onclick="navTo('receitas')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Receitas</div>
     <div class="ni" data-p="fixas" onclick="navTo('fixas')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Contas fixas</div>
     <div class="ni" data-p="variaveis" onclick="navTo('variaveis')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 001.99 1.61h9.72a2 2 0 001.99-1.61L23 6H6"/></svg>Variáveis</div>
-    <div class="ni" data-p="parcelas" onclick="navTo('parcelas')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>Parcelas</div>
     <span class="nav-s">Jurídico</span>
     <div class="ni" data-p="processos" onclick="navTo('processos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Processos</div>
     <span class="nav-s">Controle</span>
@@ -268,7 +267,6 @@ textarea{resize:vertical;min-height:70px;}
       <div id="pg-receitas" style="display:none"></div>
       <div id="pg-fixas" style="display:none"></div>
       <div id="pg-variaveis" style="display:none"></div>
-      <div id="pg-parcelas" style="display:none"></div>
       <div id="pg-processos" style="display:none"></div>
       <div id="pg-dividas" style="display:none"></div>
       <div id="pg-comprovantes" style="display:none"></div>
@@ -285,7 +283,6 @@ textarea{resize:vertical;min-height:70px;}
     <div class="ni" onclick="navTo('receitas');closeDrawer()">Receitas</div>
     <div class="ni" onclick="navTo('fixas');closeDrawer()">Contas fixas</div>
     <div class="ni" onclick="navTo('variaveis');closeDrawer()">Variáveis</div>
-    <div class="ni" onclick="navTo('parcelas');closeDrawer()">Parcelas</div>
     <span class="nav-s">Jurídico</span>
     <div class="ni" onclick="navTo('processos');closeDrawer()">Processos</div>
     <span class="nav-s">Controle</span>
@@ -661,9 +658,8 @@ function openDivModal(d=null){
 function marcarPago(tipo,i){
   const item=D[tipo][i];
   item.pago=!item.pago;
-  if(tipo==='fixas'){rlF();rFixas();}
+  if(tipo==='fixas'||tipo==='parcelas'){rFixas();}
   else if(tipo==='variaveis'){rlV();rVariaveis();}
-  else if(tipo==='parcelas'){rlP();rParcelas();}
   if(item.pago)abrirComprovanteRapido(item.desc,item.valor,item.cat);
 }
 function abrirComprovanteRapido(desc,valor,categoria){
@@ -723,8 +719,8 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pageshow', fecharTudoQueEstaAberto);
 
 function render(){
-  ['resumo','receitas','fixas','variaveis','parcelas','processos','dividas','comprovantes'].forEach(p=>document.getElementById('pg-'+p).style.display=p===CP?'block':'none');
-  if(CP==='resumo')rResumo();else if(CP==='receitas')rReceitas();else if(CP==='fixas')rFixas();else if(CP==='variaveis')rVariaveis();else if(CP==='parcelas')rParcelas();else if(CP==='processos')rProcessos();else if(CP==='dividas')rDividas();else if(CP==='comprovantes')rComprovantes();
+  ['resumo','receitas','fixas','variaveis','processos','dividas','comprovantes'].forEach(p=>document.getElementById('pg-'+p).style.display=p===CP?'block':'none');
+  if(CP==='resumo')rResumo();else if(CP==='receitas')rReceitas();else if(CP==='fixas')rFixas();else if(CP==='variaveis')rVariaveis();else if(CP==='processos')rProcessos();else if(CP==='dividas')rDividas();else if(CP==='comprovantes')rComprovantes();
 }
 
 function hdr(t,s,mon=true){return`<div class="ph"><div><div class="pt">${t}</div><div class="ps">${s}</div></div>${mon?`<div class="mnav"><button onclick="mudaMes(-1)">&#8592;</button><span class="mlbl">${ml(MA)}</span><button onclick="mudaMes(1)">&#8594;</button></div>`:''}</div>`;}
@@ -898,11 +894,16 @@ function marcarRecebido(i){
 }
 function addR(t){D[t].push({desc:'',valor:0,tipo:'La Vie'});rlR(t,t==='receitas'?'lr':t==='areceber'?'lar':'lrf');}
 function rFixas(){
-  const pago=D.fixas.filter(x=>x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
-  const aberto=D.fixas.filter(x=>!x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
-  document.getElementById('pg-fixas').innerHTML=hdr('Contas fixas','Chegam todo mês')+
-  `<div class="sbar2"><div class="sitem pg"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">✓ Pago</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green)">${fmt(pago)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.fixas.filter(x=>x.pago).length} lançamentos</div></div><div class="sitem ab"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">⏳ Em aberto</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--amber)">${fmt(aberto)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.fixas.filter(x=>!x.pago).length} lançamentos</div></div></div>`+
-  `<div class="card"><div class="ct">Contas fixas <span class="badge bgr">${fmt(soma(D.fixas))}</span></div><div class="fhead fh-fix"><span></span><span>Descrição</span><span>Valor (R$)</span><span class="hcat">Categoria</span><span class="hvenc">Venc.</span><span></span></div><div id="lf"></div><button class="btn" onclick="addF()" style="margin-top:10px">+ Adicionar</button></div>`;rlF();}
+  const pago=D.fixas.filter(x=>x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0)+D.parcelas.filter(x=>x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
+  const aberto=D.fixas.filter(x=>!x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0)+D.parcelas.filter(x=>!x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
+  const qtdPago=D.fixas.filter(x=>x.pago).length+D.parcelas.filter(x=>x.pago).length;
+  const qtdAberto=D.fixas.filter(x=>!x.pago).length+D.parcelas.filter(x=>!x.pago).length;
+  document.getElementById('pg-fixas').innerHTML=hdr('Contas fixas','Chegam todo mês — incluindo parcelas')+
+  `<div class="sbar2"><div class="sitem pg"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">✓ Pago</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green)">${fmt(pago)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${qtdPago} lançamentos</div></div><div class="sitem ab"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">⏳ Em aberto</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--amber)">${fmt(aberto)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${qtdAberto} lançamentos</div></div></div>`+
+  `<div class="card"><div class="ct">Contas fixas <span class="badge bgr">${fmt(soma(D.fixas))}</span></div><div class="fhead fh-fix"><span></span><span>Descrição</span><span>Valor (R$)</span><span class="hcat">Categoria</span><span class="hvenc">Venc.</span><span></span></div><div id="lf"></div><button class="btn" onclick="addF()" style="margin-top:10px">+ Adicionar</button></div>`+
+  `<div class="card"><div class="ct">Parcelas <span class="badge bgr">${fmt(soma(D.parcelas))}</span></div><div class="fhead fh-parc"><span></span><span>Descrição</span><span>Valor/mês</span><span class="hpn">Parcela</span><span class="hpt">Total</span><span></span></div><div id="lp"></div><button class="btn" onclick="addP()" style="margin-top:10px">+ Adicionar</button></div>`;
+  rlF();rlP();
+}
 function rlF(){const el=document.getElementById('lf');if(!el)return;el.innerHTML=D.fixas.map((x,i)=>`<div class="frow-fix${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="marcarPago('fixas',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Aluguel" oninput="D.fixas[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.fixas[${i}].valor=parseFloat(this.value)||0"><select class="hcat" onchange="D.fixas[${i}].cat=this.value">${catSel(x.cat||'Moradia')}</select><input type="number" class="hvenc" value="${x.venc||''}" placeholder="Dia" min="1" max="31" oninput="D.fixas[${i}].venc=parseInt(this.value)||null"><button class="btn-ghost" onclick="del('fixas',${i})">${trash}</button></div>`).join('');}
 function addF(){D.fixas.push({desc:'',valor:0,cat:'Moradia',venc:null});rlF();}
 function rVariaveis(){
@@ -913,12 +914,6 @@ function rVariaveis(){
   `<div class="card"><div class="ct">Variáveis <span class="badge bgr">${fmt(soma(D.variaveis))}</span></div><div class="fhead fh-fix"><span></span><span>Descrição</span><span>Valor (R$)</span><span class="hcat">Categoria</span><span class="hvenc">Venc.</span><span></span></div><div id="lv"></div><button class="btn" onclick="addV()" style="margin-top:10px">+ Adicionar</button></div>`;rlV();}
 function rlV(){const el=document.getElementById('lv');if(!el)return;el.innerHTML=D.variaveis.map((x,i)=>`<div class="frow-fix${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="marcarPago('variaveis',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Supermercado" oninput="D.variaveis[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.variaveis[${i}].valor=parseFloat(this.value)||0"><select class="hcat" onchange="D.variaveis[${i}].cat=this.value">${catSel(x.cat||'Alimentação')}</select><input type="number" class="hvenc" value="${x.venc||''}" placeholder="Dia" min="1" max="31" oninput="D.variaveis[${i}].venc=parseInt(this.value)||null"><button class="btn-ghost" onclick="del('variaveis',${i})">${trash}</button></div>`).join('');}
 function addV(){D.variaveis.push({desc:'',valor:0,cat:'Alimentação',venc:null});rlV();}
-function rParcelas(){
-  const pago=D.parcelas.filter(x=>x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
-  const aberto=D.parcelas.filter(x=>!x.pago).reduce((s,x)=>s+(parseFloat(x.valor)||0),0);
-  document.getElementById('pg-parcelas').innerHTML=hdr('Parcelas','Cartões e financiamentos')+
-  `<div class="sbar2"><div class="sitem pg"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">✓ Pago</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--green)">${fmt(pago)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.parcelas.filter(x=>x.pago).length} parcelas</div></div><div class="sitem ab"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500">⏳ Em aberto</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--amber)">${fmt(aberto)}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${D.parcelas.filter(x=>!x.pago).length} parcelas</div></div></div>`+
-  `<div class="card"><div class="ct">Parcelas <span class="badge bgr">${fmt(soma(D.parcelas))}</span></div><div class="fhead fh-parc"><span></span><span>Descrição</span><span>Valor/mês</span><span class="hpn">Parcela</span><span class="hpt">Total</span><span></span></div><div id="lp"></div><button class="btn" onclick="addP()" style="margin-top:10px">+ Adicionar</button></div>`;rlP();}
 function rlP(){const el=document.getElementById('lp');if(!el)return;el.innerHTML=D.parcelas.map((x,i)=>`<div class="frow-parc${x.pago?' pago-row':''}" style="margin-bottom:4px"><button class="tgl${x.pago?' ok':''}" onclick="marcarPago('parcelas',${i})" title="${x.pago?'Marcar como não pago':'Marcar como pago'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></button><input type="text" value="${esc(x.desc)}" placeholder="Ex: Cartão Santander" oninput="D.parcelas[${i}].desc=this.value"><input type="number" value="${fd(x.valor)}" placeholder="0,00" oninput="D.parcelas[${i}].valor=parseFloat(this.value)||0"><input type="text" class="hpn" value="${x.parcAtual||''}" placeholder="3/12" oninput="D.parcelas[${i}].parcAtual=this.value"><input type="number" class="hpt" value="${x.parcTotal||''}" placeholder="12" oninput="D.parcelas[${i}].parcTotal=parseInt(this.value)||0"><button class="btn-ghost" onclick="del('parcelas',${i})">${trash}</button></div>`).join('');}
 function addP(){D.parcelas.push({desc:'',valor:0,parcAtual:'',parcTotal:0});rlP();}
 function del(t,i){D[t].splice(i,1);render();}
