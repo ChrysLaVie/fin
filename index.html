@@ -417,6 +417,15 @@ let USER=null,hoje=new Date(),MA={y:hoje.getFullYear(),m:hoje.getMonth()};
 let dirty=false;
 let D={fixas:[],variaveis:[],parcelas:[],receitas:[],areceber:[],receitasFixas:[]};
 let PROCS=[],DIVIDAS=[],COMPS=[];
+// Recebimentos que vêm sozinhos do sistema da La Vie (tabela lavie_recebimentos).
+// Ficam fora do "Salvar mês" de propósito, pra nunca serem apagados sem querer.
+let LV=[],LV_OK=false;
+const LV_INICIO='2026-10';
+async function loadLV(){if(!USER)return;try{const{data,error}=await withTimeout(sb.from('lavie_recebimentos').select('*').eq('user_id',USER.id));if(error)throw error;LV=data||[];LV_OK=true;}catch(e){console.warn('Recebimentos La Vie indisponíveis:',e);LV=[];}}
+function lvMesHoje(){return mk({y:hoje.getFullYear(),m:hoje.getMonth()});}
+function lvRec(mes){mes=mes||mk(MA);if(mes<LV_INICIO)return[];return LV.filter(x=>x.status==='pago'&&x.pago_em&&x.pago_em.slice(0,7)===mes).sort((a,b)=>a.pago_em<b.pago_em?-1:1);}
+function lvAR(mes){mes=mes||mk(MA);const at=lvMesHoje();if(mes<LV_INICIO||mes<at)return[];return LV.filter(x=>{if(x.status!=='pendente'||!(parseFloat(x.valor)>0))return false;let m=x.vencimento?x.vencimento.slice(0,7):at;if(m<at)m=at;return m===mes;}).sort((a,b)=>(a.vencimento||'9')<(b.vencimento||'9')?-1:1);}
+function lvLabel(x){return(x.empresa?x.empresa+': ':'')+(x.descricao||'');}
 let CP='resumo',saving=false,editProcId=null,editDivId=null,pendingFile=null;
 
 let AM='login';
@@ -474,6 +483,7 @@ setTimeout(()=>{
 
 async function loadData(){
   if(!USER)return;
+  if(!LV_OK)await loadLV();
   const{data,error}=await withTimeout(sb.from('meses').select('dados').eq('user_id',USER.id).eq('mes',mk(MA)).maybeSingle());
   if(error)throw error;
   const vazio={fixas:[],variaveis:[],parcelas:[],receitas:[],areceber:[],receitasFixas:[]};
@@ -516,12 +526,13 @@ async function buscarSaldoMesAnterior(){
     const{data,error}=await withTimeout(sb.from('meses').select('dados').eq('user_id',USER.id).eq('mes',mk(prv(MA))).maybeSingle());
     if(error||!data?.dados)return null;
     const d=data.dados;
-    const rec=soma(d.receitas);
+    const rec=soma(d.receitas)+soma(lvRec(mk(prv(MA))));
     const desp=soma(d.fixas)+soma(d.variaveis)+soma(d.parcelas);
     return Math.round((rec-desp)*100)/100;
   }catch(e){return null;}
 }
 async function buscarAReceberAnterior(){
+  if(mk(MA)===LV_INICIO)return[]; // a partir daqui os clientes vêm do sistema da La Vie
   try{
     const{data,error}=await withTimeout(sb.from('meses').select('dados').eq('user_id',USER.id).eq('mes',mk(prv(MA))).maybeSingle());
     if(error||!data?.dados?.areceber?.length)return[];
@@ -561,7 +572,7 @@ async function salvarSilencioso(){
 setInterval(()=>{if(dirty)salvarSilencioso();},8000);
 async function mudaMes(d){
   if(dirty)await salvarSilencioso();
-  MA=d>0?nxt(MA):prv(MA);document.getElementById('mm').textContent=ml(MA);try{await loadData();}catch(e){toast('Erro ao carregar mês: '+e.message,'err');}render();
+  MA=d>0?nxt(MA):prv(MA);document.getElementById('mm').textContent=ml(MA);try{await loadLV();await loadData();}catch(e){toast('Erro ao carregar mês: '+e.message,'err');}render();
 }
 
 async function loadProcs(){if(!USER)return;const{data,error}=await withTimeout(sb.from('processos').select('*').eq('user_id',USER.id).order('created_at',{ascending:false}));if(error)throw error;PROCS=data||[];}
@@ -758,9 +769,10 @@ function catSel(v){return CATS.map(c=>`<option${c===v?' selected':''}>${c}</opti
 function tSel(v){return TREC.map(c=>`<option${c===v?' selected':''}>${c}</option>`).join('');}
 
 function rResumo(){
-  const rec=soma(D.receitas),fix=soma(D.fixas),vari=soma(D.variaveis),parc=soma(D.parcelas),total=fix+vari+parc,saldo=rec-total;
+  const lvr=lvRec(),lva=lvAR();
+  const rec=soma(D.receitas)+soma(lvr),fix=soma(D.fixas),vari=soma(D.variaveis),parc=soma(D.parcelas),total=fix+vari+parc,saldo=rec-total;
   const pctBruto=rec>0?Math.round(total/rec*100):0;
-  const pctLabel=pctBruto>100?`-${pctBruto-100}%`:`${pctBruto}%`;
+  const pctLabel=`${pctBruto}%`;
   const cm={};[...D.fixas,...D.variaveis].forEach(x=>{const c=x.cat||'Outros';cm[c]=(cm[c]||0)+(parseFloat(x.valor)||0);});D.parcelas.forEach(x=>{const cp=x.cat||'Parcelas';cm[cp]=(cm[cp]||0)+(parseFloat(x.valor)||0);});
   const sc=Object.entries(cm).sort((a,b)=>b[1]-a[1]),mx=sc[0]?sc[0][1]:1;
   const venc=[...D.fixas,...D.variaveis].filter(x=>x.venc).sort((a,b)=>a.venc-b.venc),dh=hoje.getDate();
@@ -773,7 +785,7 @@ function rResumo(){
   (urg.length?`<div class="alert-r">⚖️ <strong>${urg.length} processo${urg.length>1?'s':''} com prazo urgente:</strong> ${urg.map(p=>`${(p.numero||'').substring(0,18)}… (${fd2(p.proxima_data)})`).join(' · ')}</div>`:'')+
   (divEmAtraso.length?`<div class="alert-a">⚠️ <strong>${divEmAtraso.length} dívida${divEmAtraso.length>1?'s':''} pendente${divEmAtraso.length>1?'s':''} de renegociação</strong> — total: ${fmt(totalDividas)}</div>`:'')+
   `<div class="mets">
-    <div class="met"><div class="ml">Receita</div><div class="mv" style="color:var(--green)">${fmt(rec)}</div><div class="ms">${D.receitas.length} fonte${D.receitas.length!==1?'s':''}</div></div>
+    <div class="met"><div class="ml">Receita</div><div class="mv" style="color:var(--green)">${fmt(rec)}</div><div class="ms">${D.receitas.length+lvr.length} fonte${D.receitas.length+lvr.length!==1?'s':''}</div></div>
     <div class="met"><div class="ml">Gastos</div><div class="mv" style="color:var(--red)">${fmt(total)}</div><div class="ms"${pctBruto>100?' style="color:var(--red)"':''}>${pctLabel} da receita</div></div>
     <div class="met"><div class="ml">Saldo</div><div class="mv" style="color:${saldo>=0?'var(--green)':'var(--red)'}">${fmt(saldo)}</div><div class="ms">${saldo>=0?'sobra':'falta'} no mês</div></div>
     <div class="met"><div class="ml">Dívidas pendentes</div><div class="mv" style="color:var(--red);font-size:20px">${totalDividas>0?fmt(totalDividas):'—'}</div><div class="ms">${divEmAtraso.length} para renegociar</div></div>
@@ -784,7 +796,7 @@ function rResumo(){
   </div>
   ${pa.length?`<div class="alert-a">Parcela${pa.length>1?'s':''} acabando: ${pa.map(p=>p.desc+' ('+p.parcAtual+')').join(', ')}</div>`:''}
   <div class="card"><div class="ct">Vencimentos do mês</div>${venc.length===0?'<p style="font-size:13px;color:var(--muted)">Nenhum cadastrado.</p>':`<div class="vlist">${venc.map(x=>{const u=x.venc>=dh&&x.venc<=dh+5;return`<div class="vchip${u?' urg':''}"><div class="vd">Dia ${x.venc}</div><div class="vn">${esc(x.desc)}</div><div class="vv">${fmt(x.valor)}</div></div>`;}).join('')}</div>`}</div>
-  ${D.areceber.filter(x=>x.desc||x.valor).length?`<div class="card"><div class="ct">A receber <span class="badge bb">${fmt(soma(D.areceber))}</span></div><table class="tbl"><tr><th>Descrição</th><th>Tipo</th><th class="num">Valor</th></tr>${D.areceber.filter(x=>x.desc||x.valor).map(x=>`<tr><td>${esc(x.desc)||'—'}</td><td><span class="badge bgr">${x.tipo||'Outros'}</span></td><td class="num" style="color:var(--green)">${fmt(x.valor)}</td></tr>`).join('')}</table></div>`:''}`;
+  ${(()=>{const man=D.areceber.filter(x=>x.desc||x.valor);if(!man.length&&!lva.length)return'';return`<div class="card"><div class="ct">A receber <span class="badge bb">${fmt(soma(man)+soma(lva))}</span></div><table class="tbl"><tr><th>Descrição</th><th>Tipo</th><th class="num">Valor</th></tr>${man.map(x=>`<tr><td>${esc(x.desc)||'—'}</td><td><span class="badge bgr">${x.tipo||'Outros'}</span></td><td class="num" style="color:var(--green)">${fmt(x.valor)}</td></tr>`).join('')}${lva.map(x=>`<tr><td>${esc(lvLabel(x))} <span style="color:var(--muted);font-size:12px">(${x.vencimento?fd2(x.vencimento):'sem data'})</span></td><td><span class="badge bgr">La Vie (sistema)</span></td><td class="num" style="color:var(--green)">${fmt(x.valor)}</td></tr>`).join('')}</table></div>`;})()}`;
 }
 
 function rProcessos(){
@@ -904,6 +916,7 @@ function rReceitas(){
   document.getElementById('pg-receitas').innerHTML=hdr('Receitas','Tudo que entra no mês')+`
   <div class="card"><div class="ct">Receitas fixas <span class="badge bp">${fmt(soma(D.receitasFixas))}/mês</span></div><p style="font-size:12px;color:var(--muted);margin-bottom:10px">O que está aqui entra sozinho como receita em todo mês novo (salário, benefícios, aluguel recebido...).</p><div class="fhead fh-rec"><span>Descrição</span><span>Valor (R$)</span><span class="htipo">Tipo</span><span></span></div><div id="lrf"></div><button class="btn" onclick="addR('receitasFixas')" style="margin-top:10px">+ Adicionar fixa</button></div>
   <div class="card"><div class="ct">Confirmadas neste mês <span class="badge bg">${fmt(soma(D.receitas))}</span></div><div class="fhead fh-rec"><span>Descrição</span><span>Valor (R$)</span><span class="htipo">Tipo</span><span></span></div><div id="lr"></div><button class="btn" onclick="addR('receitas')" style="margin-top:10px">+ Adicionar</button></div>
+  ${mk(MA)>=LV_INICIO?(()=>{const r=lvRec(),a=lvAR();return`<div class="card"><div class="ct">Recebidos da La Vie (automático) <span class="badge bg">${fmt(soma(r))}</span></div><p style="font-size:12px;color:var(--muted);margin-bottom:10px">Entra sozinho quando você marca a parcela como paga no sistema da La Vie. Para corrigir, altere lá. Não lance de novo aqui.</p>${r.length?`<table class="tbl"><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th></tr>${r.map(x=>`<tr><td>${fd2(x.pago_em)}</td><td>${esc(lvLabel(x))}</td><td class="num" style="color:var(--green)">${fmt(x.valor)}</td></tr>`).join('')}</table>`:'<p style="font-size:13px;color:var(--muted)">Nenhum recebimento marcado neste mês ainda.</p>'}${a.length?`<div class="ct" style="margin-top:14px">A receber pelo sistema <span class="badge bb">${fmt(soma(a))}</span></div><table class="tbl"><tr><th>Vencimento</th><th>Descrição</th><th class="num">Valor</th></tr>${a.map(x=>`<tr><td>${x.vencimento?fd2(x.vencimento):'sem data'}</td><td>${esc(lvLabel(x))}</td><td class="num">${fmt(x.valor)}</td></tr>`).join('')}</table>`:''}</div>`;})():''}
   <div class="card"><div class="ct">A receber <span class="badge bb">${fmt(soma(D.areceber))}</span></div><p style="font-size:13px;color:var(--muted);margin-bottom:1rem">Valores esperados, ainda não confirmados. Toque no ✓ quando receber — ele move sozinho pra "Confirmadas".</p><div class="fhead fh-areceber"><span></span><span>Descrição</span><span>Valor (R$)</span><span class="htipo">Tipo</span><span></span></div><div id="lar"></div><button class="btn" onclick="addR('areceber')" style="margin-top:10px">+ Adicionar</button></div>`;
   rlR('receitasFixas','lrf');rlR('receitas','lr');rlR('areceber','lar');
 }
