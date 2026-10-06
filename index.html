@@ -509,8 +509,25 @@ async function loadData(){
   if(!N.areceber||N.areceber.length===0){
     N.areceber=await buscarAReceberAnterior();
   }
+  // Mês novo (ainda não salvo): já nasce com as contas fixas e as parcelas
+  // do mês anterior, todas como não pagas. Parcelas avançam 1 (ex.: 3/12 vira 4/12)
+  // e as que já terminaram não são copiadas.
+  if(!data?.dados){
+    const ant=await buscarDadosMesAnterior();
+    if(ant){
+      if(!N.fixas.length)N.fixas=(ant.fixas||[]).map(x=>({...x,pago:false}));
+      if(!N.parcelas.length)N.parcelas=(ant.parcelas||[]).filter(p=>{const[a,t]=String(p.parcAtual||'').split('/').map(Number);return !(a&&t&&a>=t);}).map(p=>{const[a,t]=String(p.parcAtual||'').split('/').map(Number);return{...p,pago:false,parcAtual:a&&t?`${a+1}/${t}`:p.parcAtual};});
+    }
+  }
   if(seq!==LOAD_SEQ)return;
   D=N;
+}
+async function buscarDadosMesAnterior(){
+  try{
+    const{data,error}=await withTimeout(sb.from('meses').select('dados').eq('user_id',USER.id).eq('mes',mk(prv(MA))).maybeSingle());
+    if(error||!data?.dados)return null;
+    return data.dados;
+  }catch(e){return null;}
 }
 async function buscarReceitasFixasAnteriores(){
   let cursor=prv(MA);
