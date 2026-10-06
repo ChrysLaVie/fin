@@ -481,32 +481,36 @@ setTimeout(()=>{
   if(auth&&app&&!app.classList.contains('visible')){auth.style.display='flex';}
 },5000);
 
+let LOAD_SEQ=0;
 async function loadData(){
   if(!USER)return;
+  const seq=++LOAD_SEQ; // se outra carga começar no meio desta, esta é descartada (evita lançar o saldo anterior em dobro)
   if(!LV_OK)await loadLV();
   const{data,error}=await withTimeout(sb.from('meses').select('dados').eq('user_id',USER.id).eq('mes',mk(MA)).maybeSingle());
   if(error)throw error;
   const vazio={fixas:[],variaveis:[],parcelas:[],receitas:[],areceber:[],receitasFixas:[]};
-  D=data?.dados?{...vazio,...data.dados}:{...vazio};
+  const N=data?.dados?{...vazio,...data.dados}:{...vazio};
   // Se esse mês não tem nenhuma receita lançada ainda, preenche com as
   // receitas fixas (salário, benefício etc.) — do próprio mês, se já tiver
   // sido configurado antes, ou do mês anterior mais próximo que tiver —
   // e soma o saldo (positivo ou negativo) que sobrou do mês anterior.
-  if(!D.receitas||D.receitas.length===0){
-    if(!D.receitasFixas||D.receitasFixas.length===0){
-      D.receitasFixas=await buscarReceitasFixasAnteriores();
+  if(!N.receitas||N.receitas.length===0){
+    if(!N.receitasFixas||N.receitasFixas.length===0){
+      N.receitasFixas=await buscarReceitasFixasAnteriores();
     }
-    D.receitas=D.receitasFixas.length?D.receitasFixas.map(x=>({...x})):[];
+    N.receitas=N.receitasFixas.length?N.receitasFixas.map(x=>({...x})):[];
     const saldoAnt=await buscarSaldoMesAnterior();
     if(saldoAnt!==null&&Math.round(saldoAnt*100)!==0){
-      D.receitas.push({desc:'Saldo do mês anterior',tipo:'La Vie',valor:saldoAnt});
+      N.receitas.push({desc:'Saldo do mês anterior',tipo:'La Vie',valor:saldoAnt});
     }
   }
   // "A receber" que ainda não foi recebido no mês anterior continua
   // aparecendo nos meses seguintes, até você marcar como recebido (removendo).
-  if(!D.areceber||D.areceber.length===0){
-    D.areceber=await buscarAReceberAnterior();
+  if(!N.areceber||N.areceber.length===0){
+    N.areceber=await buscarAReceberAnterior();
   }
+  if(seq!==LOAD_SEQ)return;
+  D=N;
 }
 async function buscarReceitasFixasAnteriores(){
   let cursor=prv(MA);
