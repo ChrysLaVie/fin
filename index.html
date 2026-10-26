@@ -532,8 +532,9 @@ async function loadData(){
   if(!data?.dados){
     const ant=await buscarDadosMesAnterior();
     if(ant){
-      if(!N.fixas.length)N.fixas=(ant.fixas||[]).map(x=>({...x,pago:false}));
-      if(!N.parcelas.length)N.parcelas=(ant.parcelas||[]).filter(p=>{const[a,t]=String(p.parcAtual||'').split('/').map(Number);return !(a&&t&&a>=t);}).map(p=>{const[a,t]=String(p.parcAtual||'').split('/').map(Number);return{...p,pago:false,parcAtual:a&&t?`${a+1}/${t}`:p.parcAtual};});
+      const limpo=x=>{const{linha,pix,boleto,vencData,ref,obs,...r}=x;return r;}; // código de barras e vencimento mudam todo mês
+      if(!N.fixas.length)N.fixas=(ant.fixas||[]).map(x=>({...limpo(x),pago:false}));
+      if(!N.parcelas.length)N.parcelas=(ant.parcelas||[]).filter(p=>{const[a,t]=String(p.parcAtual||'').split('/').map(Number);return !(a&&t&&a>=t);}).map(p=>{const[a,t]=String(p.parcAtual||'').split('/').map(Number);return{...limpo(p),pago:false,parcAtual:a&&t?`${a+1}/${t}`:p.parcAtual};});
     }
   }
   if(seq!==LOAD_SEQ)return;
